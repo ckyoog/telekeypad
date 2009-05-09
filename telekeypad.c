@@ -109,14 +109,116 @@ int main(int argc, char **argv)
 }
 
 
-/* What you need */
+/* What you want */
+
+enum {
+	NUM1, NUM2, NUM3, NUM4, NUM5, NUM6, NUM7, NUM8, NUM9,
+	ASTERISK, NUM0,	HASH, DIALUP, SPACE, HANGUP,
+	BACKSPACE, CLEAR
+};
+char *label[] = {"1", "2", "3", "4", "5", "6", \
+	"7", "8", "9", "*", "0", "#", "dialup", "space", "hangup", \
+	"backspace", "clear"};
+GtkWidget *entry;
+
+inline void dialup(const gchar *telenumber)
+{
+	g_printf("dialup with telephone number: %s\n", telenumber);
+}
+
+inline void hangup()
+{
+	g_printf("hangup\n");
+}
+
+void click_event(GtkButton *button, char *string)
+{
+	GtkEditable *editable = GTK_EDITABLE(entry);
+	int textpos = gtk_editable_get_position(editable);
+
+	/* parse some strings */
+	if (strcmp(string, label[SPACE]) == 0)
+		string = " ";
+	else if (strcmp(string, label[BACKSPACE]) == 0) {
+		gtk_editable_delete_text(editable, textpos-1, -1);
+		goto skip_insert;
+	} else if (strcmp(string, label[CLEAR]) == 0) {
+		gtk_editable_delete_text(editable, 0, -1);
+		goto skip_insert;
+	} else if (strcmp(string, label[DIALUP]) == 0) {
+		dialup(gtk_entry_get_text(GTK_ENTRY(entry)));
+		return;
+	} else if (strcmp(string, label[HANGUP]) == 0) {
+		hangup();
+		gtk_editable_delete_text(editable, 0, -1);
+		return;
+	}
+	gtk_editable_insert_text(editable, string, strlen(string), &textpos);
+	gtk_editable_set_position(editable, textpos);
+skip_insert:
+	return;
+}
+
 GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
 {
-	GtkWidget *dialog = gtk_dialog_new_with_buttons("telephone",
+	/* New dialog */
+	GtkWidget *dialog, *content_area;
+	dialog = gtk_dialog_new_with_buttons("telephone",
 			parent_window, GTK_DIALOG_DESTROY_WITH_PARENT,
-			GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
+			//GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
 			NULL);
 	gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ALWAYS);
+	content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+
+	/* New vbox which will be added into dialog */
+	GtkWidget *vbox = gtk_vbox_new(FALSE, 5);
+
+	/* Part1 of vbox: New buttons and layout */
+	GtkWidget *table, *button[15];
+	int i, j, idx = 0, rows = 5, cols = 3;
+	table = gtk_table_new(rows, cols, TRUE);
+	for (i = 0; i < rows; i++) {
+		for (j = 0; j < cols; j++) {
+			/* new buttons and place them by table */
+			button[idx] = gtk_button_new_with_label(label[idx]);
+			g_signal_connect(G_OBJECT(button[idx]), "clicked",
+					G_CALLBACK(click_event), label[idx]);
+			gtk_table_attach_defaults(GTK_TABLE(table),
+					button[idx], j, j+1, i, i+1);
+			idx++;
+		}
+	}
+
+	/* Part2 of vbox: New entry and two buttons */
+	GtkWidget *align, *hbox;
+	GtkButton *backspace, *clear;
+	align = gtk_alignment_new(0, 0, 1, 1);
+	hbox = gtk_hbox_new(FALSE, 3);
+
+	entry = gtk_entry_new();
+	backspace = GTK_BUTTON(gtk_button_new_with_label(label[BACKSPACE]));
+	clear = GTK_BUTTON(gtk_button_new_with_label(label[CLEAR]));
+
+	g_signal_connect(G_OBJECT(backspace), "clicked",
+			G_CALLBACK(click_event), label[BACKSPACE]);
+	g_signal_connect(G_OBJECT(clear), "clicked",
+			G_CALLBACK(click_event), label[CLEAR]);
+	g_signal_connect(G_OBJECT(entry), "activate",
+			G_CALLBACK(entry_activate), button[DIALUP]);
+
+	gtk_container_add(GTK_CONTAINER(hbox), entry);
+	gtk_container_add(GTK_CONTAINER(hbox), GTK_WIDGET(backspace));
+	gtk_container_add(GTK_CONTAINER(hbox), GTK_WIDGET(clear));
+	gtk_container_add(GTK_CONTAINER(align), hbox);
+	gtk_widget_show_all(align);
+
+	/* Add Part2 into vbox first */
+	gtk_container_add(GTK_CONTAINER(vbox), align);
+	/* Then add Part1 into vbox */
+	gtk_container_add(GTK_CONTAINER(vbox), table);
+	/* Add vbox into content area of dialog */
+	gtk_container_add(GTK_CONTAINER(content_area), vbox);
+	gtk_widget_show_all(vbox);
 	return dialog;
 }
 
