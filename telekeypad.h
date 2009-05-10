@@ -1,33 +1,18 @@
 #ifndef _TELEKEYPAD_H_
 #define _TELEKEYPAD_H_
 
-#include <assert.h>
-#include <locale.h>
+/* button click event callback */
+void telekeypad_click(GtkButton *button, gpointer data);
 
-#if GTK_CHECK_VERSION(2,4,0)
-#include <glib/gi18n.h>
-#define __(str) ({ \
-	assert(str);\
-	gchar *t = g_locale_to_utf8(_(str), -1, NULL, NULL, NULL);\
-	if (t == NULL) {\
-		t = malloc(strlen(str)+1);\
-		strcpy(t, (str));\
-	}\
-	t;\
-})
-#else
-#define __(str) (str)
-#endif
+/* call this when telephone call is incomming */
+void telekeypad_callin(const gchar *telenumber);
 
-void show_window_choose_project();
+/* helper for load icon which is on button */
+void telekeypad_set_icon_path(const char *path);
 
-#define  message_dialog(parent, type, buttons, title, message_format...) do {\
-	GtkWidget *dialog = gtk_message_dialog_new(parent, GTK_DIALOG_MODAL,\
-			type, buttons, message_format);\
-	gtk_window_set_title(GTK_WINDOW(dialog), title);\
-	gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER);\
-	gtk_dialog_run(GTK_DIALOG(dialog));\
-	gtk_widget_destroy(dialog);\
-} while (0)
+/* routines for set connect state */
+void telekeypad_set_connecting();
+void telekeypad_set_connected();
+void telekeypad_set_disconnect();
 
 #endif	/* _TELEKEYPAD_H_ */

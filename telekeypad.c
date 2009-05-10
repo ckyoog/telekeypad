@@ -1,5 +1,7 @@
+/* What you want */
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
@@ -7,163 +9,147 @@
 
 #include "telekeypad.h"
 
-#define PATH_CHAR_MAX 1025
-#define PROCNAME "telekeypad"
+//extern void telephone_related();
 
-void open_telekeypad(GtkButton *button, gpointer data);
+/* Internal implementation */
+#define DIALUP_STR "dialup"
+#define ACCEPT_STR "accept"
+enum {
+	NUM1, NUM2, NUM3,
+	NUM4, NUM5, NUM6,
+	NUM7, NUM8, NUM9,
+	ASTERISK, NUM0,	HASH,
+	DIALUP_ACCEPT, SPACE, HANGUP,
+	BACKSPACE, CLEAR
+};
+static struct button_appearance {
+	gchar *label;
+	gchar *iconname;
+} bappear[] = {
+	{"1", NULL}, {"2", NULL}, {"3", NULL},
+	{"4", NULL}, {"5", NULL}, {"6", NULL},
+	{"7", NULL}, {"8", NULL}, {"9", NULL},
+	{"*", NULL}, {"0", NULL}, {"#", NULL},
+	{NULL, "dialup.png"}, {"space", NULL}, {"hangup", "hangup.png"},
+	{"backspace", "backspace.png"}, {"clear", "clear.png"}
+};
+static GtkWidget *entry = NULL;
+static int iscallin = 0;
+static const char *callin_number = NULL;
+static char icon_path[1025] = {0};
+static enum { CONNECTING, CONNECTED, DISCONNECT } tele_state = DISCONNECT;
 
-static void close_window(GtkButton *button, G_GNUC_UNUSED gpointer user_data)
+inline static void telekeypad_set_conn_state(int state)
 {
-	GtkWidget *window = gtk_widget_get_toplevel(GTK_WIDGET(button));
-	gtk_widget_destroy(GTK_WIDGET(window));
+	tele_state = state;
+	if (GTK_IS_ENTRY(entry))
+		gtk_editable_set_editable(GTK_EDITABLE(entry),
+				tele_state != CONNECTING);
 }
 
+static inline void dialup_accept(const gchar *telenumber)
+{
+	if (iscallin) {	/* accept */
+		g_printf("accept telephone number: %s\n", telenumber);
+		telekeypad_set_conn_state(CONNECTED);
+		iscallin = 0;
+	} else {	/* dialup */
+		telekeypad_set_conn_state(CONNECTING);
+		g_printf("dialup with telephone number: %s\n", telenumber);
+		telekeypad_set_conn_state(CONNECTED);
+	}
+}
 
-void entry_activate(GtkEntry *entry, GtkButton *button)
+static inline void hangup()
+{
+	if (tele_state != DISCONNECT) {
+		g_printf("hangup\n");
+	}
+	telekeypad_set_conn_state(DISCONNECT);
+	gtk_editable_delete_text(GTK_EDITABLE(entry), 0, -1);
+	iscallin = 0;
+}
+
+/* Event callback handler
+ * ================ */
+static void entry_insert(GtkEditable *editable,
+		gchar *new_text, gint new_text_length,
+		gint *position, gpointer user_data)
+{
+	/* dialup string you input or paste if connected */
+	if (tele_state == CONNECTED)
+		dialup_accept(new_text);
+}
+
+static void entry_activate(GtkEntry *entry, GtkButton *button)
 {
 	/*g_signal_emit_by_name(button, "clicked");*/
 	gtk_widget_activate(GTK_WIDGET(button));
 }
 
-void send_delete_event(GtkWindow *window)
-{
-	/* Synthesize delete_event to close dialog. */
-	GtkWidget *widget = GTK_WIDGET (window);
-	GdkEvent *event;
-
-	event = gdk_event_new (GDK_DELETE);
-
-	event->any.window = g_object_ref (widget->window);
-	event->any.send_event = TRUE;
-
-	gtk_main_do_event (event);
-	gdk_event_free (event);
-}
-
-static GtkWindow *prepare_window()
-{
-	GtkWindow *window = GTK_WINDOW(gtk_window_new(GTK_WINDOW_TOPLEVEL));
-	gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
-	gtk_window_set_title(GTK_WINDOW(window), PROCNAME);
-	gtk_container_set_border_width(GTK_CONTAINER(window), 10);
-	g_signal_connect(G_OBJECT(window), "destroy",
-			G_CALLBACK(gtk_main_quit), NULL);
-
-	/* DND */
-	GtkWidget *widget = GTK_WIDGET(window);
-	gtk_drag_dest_set(widget, GTK_DEST_DEFAULT_ALL, NULL, 0,
-			GDK_ACTION_COPY | GDK_ACTION_MOVE);
-	gtk_drag_dest_add_uri_targets(widget);
-
-	/* Key binding */
-	GtkWindowClass *class = GTK_WINDOW_GET_CLASS(window);
-	GObjectClass *gobject_class = G_OBJECT_CLASS (class);
-	g_signal_new (("close_window"),
-			G_OBJECT_CLASS_TYPE (gobject_class),
-			G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
-			0,
-			NULL, NULL,
-			gtk_marshal_NONE__NONE,
-			G_TYPE_NONE, 0);
-	g_signal_connect(G_OBJECT(window), "close-window",
-			G_CALLBACK(send_delete_event), NULL);
-
-	GtkBindingSet *binding_set = gtk_binding_set_by_class(class);
-	gtk_binding_entry_add_signal (binding_set,
-			GDK_Escape, 0, "close-window", 0);
-
-	return window;
-}
-
-void show_window_choose_project()
-{
-	GtkWidget *window, *button;
-	char locale_dir[PATH_CHAR_MAX] = "./locale";	/* default */
-	//char locale_dir[PATH_CHAR_MAX] = "/usr/share/locale";	/* default */
-#if _WIN32
-	char locale_env[65] = {0};
-	char locale_name[65] = "";	/* default is empty value */
-	GetLocaleFromRegistry(locale_name, 65);
-	sprintf(locale_env, "LC_ALL=%s", locale_name);
-	putenv(locale_env);
-	GetFilePathInModuleDir("locale", locale_dir, PATH_CHAR_MAX - 1);
-#else
-	setlocale(LC_ALL, "");
-#endif
-	textdomain(PROCNAME);
-	bindtextdomain(PROCNAME, locale_dir);
-
-	window = GTK_WIDGET(prepare_window());
-	button = gtk_button_new_with_label("telephone");
-	g_signal_connect(G_OBJECT(button), "clicked",
-			G_CALLBACK(open_telekeypad), NULL);
-	gtk_container_add(GTK_CONTAINER(window), button);
-	gtk_widget_show_all(window);
-}
-
-int main(int argc, char **argv)
-{
-	gtk_init(&argc, &argv);
-	show_window_choose_project();
-	gtk_main();
-}
-
-
-/* What you want */
-
-enum {
-	NUM1, NUM2, NUM3, NUM4, NUM5, NUM6, NUM7, NUM8, NUM9,
-	ASTERISK, NUM0,	HASH, DIALUP, SPACE, HANGUP,
-	BACKSPACE, CLEAR
-};
-char *label[] = {"1", "2", "3", "4", "5", "6", \
-	"7", "8", "9", "*", "0", "#", "dialup", "space", "hangup", \
-	"backspace", "clear"};
-GtkWidget *entry;
-
-inline void dialup(const gchar *telenumber)
-{
-	g_printf("dialup with telephone number: %s\n", telenumber);
-}
-
-inline void hangup()
-{
-	g_printf("hangup\n");
-}
-
-void click_event(GtkButton *button, char *string)
+static void click_event(GtkButton *button, char *string)
 {
 	GtkEditable *editable = GTK_EDITABLE(entry);
-	int textpos = gtk_editable_get_position(editable);
 
 	/* parse some strings */
-	if (strcmp(string, label[SPACE]) == 0)
-		string = " ";
-	else if (strcmp(string, label[BACKSPACE]) == 0) {
-		gtk_editable_delete_text(editable, textpos-1, -1);
-		goto skip_insert;
-	} else if (strcmp(string, label[CLEAR]) == 0) {
-		gtk_editable_delete_text(editable, 0, -1);
-		goto skip_insert;
-	} else if (strcmp(string, label[DIALUP]) == 0) {
-		dialup(gtk_entry_get_text(GTK_ENTRY(entry)));
+	if (strcmp(string, bappear[DIALUP_ACCEPT].label) == 0) {
+		dialup_accept(gtk_entry_get_text(GTK_ENTRY(entry)));
 		return;
-	} else if (strcmp(string, label[HANGUP]) == 0) {
+	} else if (strcmp(string, bappear[HANGUP].label) == 0) {
 		hangup();
-		gtk_editable_delete_text(editable, 0, -1);
 		return;
-	}
-	gtk_editable_insert_text(editable, string, strlen(string), &textpos);
-	gtk_editable_set_position(editable, textpos);
+	} else if (gtk_editable_get_editable(editable)) {
+		int startpos, endpos;
+		gtk_editable_get_selection_bounds(editable, &startpos, &endpos);
+		gtk_editable_delete_selection(editable);
+		int textpos = gtk_editable_get_position(editable);
+		if (strcmp(string, bappear[SPACE].label) == 0)
+			string = " ";
+		else if (strcmp(string, bappear[BACKSPACE].label) == 0) {
+			if (startpos == endpos) {
+				gtk_editable_delete_text(editable,
+						textpos-1, textpos);
+				textpos--;
+			}
+			goto skip_insert;
+		} else if (strcmp(string, bappear[CLEAR].label) == 0) {
+			gtk_editable_delete_text(editable, textpos = 0, -1);
+			goto skip_insert;
+		}
+		gtk_editable_insert_text(editable, string,
+				strlen(string), &textpos);
 skip_insert:
-	return;
+		gtk_widget_grab_focus(entry);
+		gtk_editable_set_position(editable, textpos);
+	}
+}
+/* ================ */
+
+static GtkWidget *prepare_icon(int buttonid)
+{
+	int len = strlen(icon_path);
+	GError *error = NULL;
+	gchar *iconname = bappear[buttonid].iconname;
+	if (iconname == NULL)
+		return NULL;
+	strncat(icon_path, iconname, sizeof(icon_path)-1);
+	GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_size(
+			icon_path, 22, 22, &error);
+	if (pixbuf == NULL)
+		return NULL;
+	icon_path[len] = 0;	/* resume icon path */
+	return gtk_image_new_from_pixbuf(pixbuf);
 }
 
-GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
+static GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
 {
 	/* New dialog */
 	GtkWidget *dialog, *content_area;
-	dialog = gtk_dialog_new_with_buttons("telephone",
+	gchar title[1025] = "call out";
+	if (iscallin)
+		snprintf(title, sizeof(title)-1,
+				"%s is calling you", callin_number);
+	dialog = gtk_dialog_new_with_buttons(title,
 			parent_window, GTK_DIALOG_DESTROY_WITH_PARENT,
 			//GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
 			NULL);
@@ -173,16 +159,35 @@ GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
 	/* New vbox which will be added into dialog */
 	GtkWidget *vbox = gtk_vbox_new(FALSE, 5);
 
+#define ROWS 5
+#define COLS 3
+#define TOTAL (ROWS*COLS)
+	/* prepare image first */
+	GtkWidget *imagep, *image[TOTAL+2] = {0};
+	image[DIALUP_ACCEPT] = prepare_icon(DIALUP_ACCEPT);
+	image[HANGUP] = prepare_icon(HANGUP);
+	image[BACKSPACE] = prepare_icon(BACKSPACE);
+	image[CLEAR] = prepare_icon(CLEAR);
+
 	/* Part1 of vbox: New buttons and layout */
-	GtkWidget *table, *button[15];
-	int i, j, idx = 0, rows = 5, cols = 3;
+	GtkWidget *table, *button[TOTAL];
+	int i, j, idx = 0, rows = ROWS, cols = COLS;
 	table = gtk_table_new(rows, cols, TRUE);
 	for (i = 0; i < rows; i++) {
 		for (j = 0; j < cols; j++) {
+			gchar *strval = NULL;
 			/* new buttons and place them by table */
-			button[idx] = gtk_button_new_with_label(label[idx]);
+			if (image[idx] == NULL)
+				button[idx] =
+				gtk_button_new_with_label(bappear[idx].label);
+			else {
+				button[idx] = gtk_button_new();
+				gtk_button_set_image(GTK_BUTTON(button[idx]),
+					image[idx]);
+			}
 			g_signal_connect(G_OBJECT(button[idx]), "clicked",
-					G_CALLBACK(click_event), label[idx]);
+					G_CALLBACK(click_event),
+					bappear[idx].label);
 			gtk_table_attach_defaults(GTK_TABLE(table),
 					button[idx], j, j+1, i, i+1);
 			idx++;
@@ -196,15 +201,40 @@ GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
 	hbox = gtk_hbox_new(FALSE, 3);
 
 	entry = gtk_entry_new();
-	backspace = GTK_BUTTON(gtk_button_new_with_label(label[BACKSPACE]));
-	clear = GTK_BUTTON(gtk_button_new_with_label(label[CLEAR]));
+	if (iscallin) {
+		gtk_entry_set_text(GTK_ENTRY(entry), callin_number);
+		gtk_editable_set_editable(GTK_EDITABLE(entry), FALSE);
+	}
+	/* new button backspace */
+	imagep = image[BACKSPACE];
+	if (imagep == NULL)
+		backspace = GTK_BUTTON(gtk_button_new_with_label(
+					bappear[BACKSPACE].label));
+	else {
+		backspace = GTK_BUTTON(gtk_button_new());
+		gtk_button_set_image(backspace, imagep);
+	}
+	/* new button clear */
+	imagep = image[CLEAR];
+	if (imagep == NULL)
+		clear = GTK_BUTTON(gtk_button_new_with_label(
+					bappear[CLEAR].label));
+	else {
+		clear = GTK_BUTTON(gtk_button_new());
+		gtk_button_set_image(clear, imagep);
+	}
 
 	g_signal_connect(G_OBJECT(backspace), "clicked",
-			G_CALLBACK(click_event), label[BACKSPACE]);
+			G_CALLBACK(click_event), bappear[BACKSPACE].label);
 	g_signal_connect(G_OBJECT(clear), "clicked",
-			G_CALLBACK(click_event), label[CLEAR]);
+			G_CALLBACK(click_event), bappear[CLEAR].label);
 	g_signal_connect(G_OBJECT(entry), "activate",
-			G_CALLBACK(entry_activate), button[DIALUP]);
+			G_CALLBACK(entry_activate), button[DIALUP_ACCEPT]);
+	/* The insert-at-cursor callback of GtkEntry is not
+	 * called when performing insert, I don't know why.
+	 * Use insert-text signal of GtkEditable instead. */
+	g_signal_connect(G_OBJECT(entry), "insert-text",
+			G_CALLBACK(entry_insert), NULL);
 
 	gtk_container_add(GTK_CONTAINER(hbox), entry);
 	gtk_container_add(GTK_CONTAINER(hbox), GTK_WIDGET(backspace));
@@ -222,15 +252,52 @@ GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
 	return dialog;
 }
 
-void open_telekeypad(GtkButton *button, gpointer data)
+static void open_telekeypad(GtkWindow *window, gpointer data)
 {
-	GtkWidget *window = gtk_widget_get_toplevel(GTK_WIDGET(button));
 	GtkWidget *dialog = prepare_telekeypad(GTK_WINDOW(window));
 	assert(dialog != NULL);
 	//gtk_widget_show_all(dialog);
-	if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
-	{
-	}
+	gtk_dialog_run(GTK_DIALOG(dialog));
+
+	/* Here dialog is closed. Don't change order of cleanup routines. */
+	hangup();
 	gtk_widget_destroy (dialog);
+	entry = NULL;
+}
+
+/* External Interface */
+void telekeypad_click(GtkButton *button, gpointer data)
+{
+	iscallin = 0;
+	bappear[DIALUP_ACCEPT].label = DIALUP_STR;
+	GtkWidget *window = gtk_widget_get_toplevel(GTK_WIDGET(button));
+	open_telekeypad(GTK_WINDOW(window), data);
+}
+
+void telekeypad_callin(const char *telenumber)
+{
+	iscallin = 1;	/* indicate telekeypad will be open due to callin */
+	callin_number = telenumber;
+	assert(callin_number != NULL);
+	bappear[DIALUP_ACCEPT].label = ACCEPT_STR;
+	open_telekeypad(NULL, NULL);
+}
+
+void telekeypad_set_icon_path(const char *path)
+{
+	strncpy(icon_path, path, sizeof(icon_path)-1);
+}
+
+void telekeypad_set_connecting()
+{
+	telekeypad_set_conn_state(CONNECTING);
+}
+void telekeypad_set_connected()
+{
+	telekeypad_set_conn_state(CONNECTED);
+}
+void telekeypad_set_disconnect()
+{
+	telekeypad_set_conn_state(DISCONNECT);
 }
 
