@@ -1,15 +1,29 @@
-/* What you want */
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 #include <gtk/gtkmarshal.h>
+#if ! GTK_CHECK_VERSION(2,14,0)
+#include <glib.h>
+#include <glib/gprintf.h>
+#endif
 
 #include "telekeypad.h"
 
+
 //extern void telephone_related();
+
+#ifndef FOR_MY_OWN_USE
+void set_status_button_sensitive();
+void set_status_button_insensitive();
+#else
+#define set_status_button_sensitive()
+#define set_status_button_insensitive()
+#endif
+
 
 /* Internal implementation */
 #define DIALUP_STR "dialup"
@@ -42,20 +56,36 @@ static enum { CONNECTING, CONNECTED, DISCONNECT } tele_state = DISCONNECT;
 inline static void telekeypad_set_conn_state(int state)
 {
 	tele_state = state;
-	if (GTK_IS_ENTRY(entry))
-		gtk_editable_set_editable(GTK_EDITABLE(entry),
-				tele_state != CONNECTING);
+
+	if (GTK_IS_ENTRY(entry)) {
+		GtkEditable *editable = GTK_EDITABLE(entry);
+		gtk_editable_set_editable(editable, tele_state != CONNECTING);
+		if (tele_state == CONNECTED)
+			gtk_editable_set_position(editable, -1);
+	}
+}
+
+static inline void send_telenumber(const gchar *telenumber)
+{
+	g_printf("dialup with telephone number: %s\n", telenumber);
+	/* call your dialup function here */
 }
 
 static inline void dialup_accept(const gchar *telenumber)
 {
+	if (tele_state != DISCONNECT)	/* only do connect while disconnect */
+		return;
 	if (iscallin) {	/* accept */
 		g_printf("accept telephone number: %s\n", telenumber);
+		/* call your accept function here */
+
 		telekeypad_set_conn_state(CONNECTED);
 		iscallin = 0;
 	} else {	/* dialup */
 		telekeypad_set_conn_state(CONNECTING);
-		g_printf("dialup with telephone number: %s\n", telenumber);
+
+		send_telenumber(telenumber);
+
 		telekeypad_set_conn_state(CONNECTED);
 	}
 }
@@ -64,6 +94,7 @@ static inline void hangup()
 {
 	if (tele_state != DISCONNECT) {
 		g_printf("hangup\n");
+		/* call your hangup function here */
 	}
 	telekeypad_set_conn_state(DISCONNECT);
 	gtk_editable_delete_text(GTK_EDITABLE(entry), 0, -1);
@@ -78,7 +109,7 @@ static void entry_insert(GtkEditable *editable,
 {
 	/* dialup string you input or paste if connected */
 	if (tele_state == CONNECTED)
-		dialup_accept(new_text);
+		send_telenumber(new_text);
 }
 
 static void entry_activate(GtkEntry *entry, GtkButton *button)
@@ -123,6 +154,17 @@ skip_insert:
 		gtk_editable_set_position(editable, textpos);
 	}
 }
+
+gboolean dialog_close(GtkDialog *dialog, GdkEvent *event, gpointer data)
+{
+	/* Here dialog is closed. Don't change order of cleanup routines. */
+	hangup();
+	gtk_widget_destroy(GTK_WIDGET(dialog));
+	entry = NULL;
+
+	set_status_button_sensitive();
+	return TRUE;
+}
 /* ================ */
 
 static GtkWidget *prepare_icon(int buttonid)
@@ -154,7 +196,13 @@ static GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
 			//GTK_STOCK_OK, GTK_RESPONSE_ACCEPT,
 			NULL);
 	gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ALWAYS);
+	g_signal_connect(G_OBJECT(dialog), "delete-event",
+			G_CALLBACK(dialog_close), NULL);
+#if GTK_CHECK_VERSION(2,14,0)
 	content_area = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+#else
+	content_area = GTK_WIDGET((GTK_DIALOG(dialog))->vbox);
+#endif
 
 	/* New vbox which will be added into dialog */
 	GtkWidget *vbox = gtk_vbox_new(FALSE, 5);
@@ -254,33 +302,32 @@ static GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
 
 static void open_telekeypad(GtkWindow *window, gpointer data)
 {
-	GtkWidget *dialog = prepare_telekeypad(GTK_WINDOW(window));
+	GtkWidget *dialog = prepare_telekeypad(window);
 	assert(dialog != NULL);
-	//gtk_widget_show_all(dialog);
+	set_status_button_insensitive();
+#ifdef TELEKEYPAD_IS_MODAL
 	gtk_dialog_run(GTK_DIALOG(dialog));
-
-	/* Here dialog is closed. Don't change order of cleanup routines. */
-	hangup();
-	gtk_widget_destroy (dialog);
-	entry = NULL;
+#else
+	gtk_widget_show_all(dialog);
+#endif
+	/* The cleanup routines is all placed in dialog_close callback. */
 }
 
 /* External Interface */
-void telekeypad_click(GtkButton *button, gpointer data)
+void telekeypad_callout(GtkWindow *w, gpointer data)
 {
 	iscallin = 0;
 	bappear[DIALUP_ACCEPT].label = DIALUP_STR;
-	GtkWidget *window = gtk_widget_get_toplevel(GTK_WIDGET(button));
-	open_telekeypad(GTK_WINDOW(window), data);
+	open_telekeypad(w, data);
 }
 
-void telekeypad_callin(const char *telenumber)
+void telekeypad_callin(const gchar *telenumber, GtkWindow *w, gpointer data)
 {
-	iscallin = 1;	/* indicate telekeypad will be open due to callin */
+	iscallin = 1;	/* indicate telekeypad will be open for callin */
 	callin_number = telenumber;
 	assert(callin_number != NULL);
 	bappear[DIALUP_ACCEPT].label = ACCEPT_STR;
-	open_telekeypad(NULL, NULL);
+	open_telekeypad(w, data);
 }
 
 void telekeypad_set_icon_path(const char *path)

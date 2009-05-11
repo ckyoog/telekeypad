@@ -20,7 +20,7 @@ LDFLAGS-$(CONFIG_WIN32)=-L$(GTK_WIN32_PATH)/lib -lgtk-win32-2.0 -lglib-2.0 -lgdk
 
 
 #####
-CFLAGS = $(CFLAGS-y)
+CFLAGS = $(CFLAGS-y) -DFOR_MY_OWN_USE -DTELEKEYPAD_IS_MODAL
 LDFLAGS = $(LDFLAGS-y)
 CC := $(CC-y)
 

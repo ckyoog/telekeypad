@@ -17,12 +17,30 @@ static void close_window(GtkButton *button, G_GNUC_UNUSED gpointer user_data)
 	gtk_widget_destroy(GTK_WIDGET(window));
 }
 
+#ifdef FOR_MY_OWN_USE
+static GtkWidget *status_button = NULL;
+void set_status_button_sensitive()
+{
+	if (GTK_IS_WIDGET(status_button))
+		gtk_widget_set_sensitive(status_button, TRUE);
+}
+void set_status_button_insensitive()
+{
+	if (GTK_IS_WIDGET(status_button))
+		gtk_widget_set_sensitive(status_button, FALSE);
+}
+#endif
 void telecall(GtkButton *button, const gchar *label)
 {
+	GtkWindow *window;
+#ifndef FOR_MY_OWN_USE
+	status_button = GTK_WIDGET(button);
+#endif
+	window = GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(button)));
 	if (strcmp(label, "callout") == 0)
-		telekeypad_click(button, NULL);
+		telekeypad_callout(window, NULL);
 	else if (strcmp(label, "callin") == 0)
-		telekeypad_callin("13811091234");
+		telekeypad_callin("13811091234", window, NULL);
 }
 
 void send_delete_event(GtkWindow *window)
@@ -117,5 +135,4 @@ int main(int argc, char **argv)
 	show_window_choose_project();
 	gtk_main();
 }
-
 
