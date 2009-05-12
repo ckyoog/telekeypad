@@ -13,8 +13,27 @@
 
 #include "telekeypad.h"
 
+/* Put your real accept, dialup, hangup functions
+ * into the three functions below respectively.
+ * { */
+static inline void _do_accept(const gchar *telenumber)
+{
+	g_printf("accept telephone number: %s\n", telenumber);
+	/* call your accept function here */
 
-//extern void telephone_related();
+}
+static inline void _do_dialup(const gchar *telenumber)
+{
+	g_printf("dialup with telephone number: %s\n", telenumber);
+	/* call your dialup function here */
+}
+static inline void _do_hangup()
+{
+	g_printf("hangup\n");
+	/* call your hangup function here */
+}
+/* } */
+
 
 #ifndef FOR_MY_OWN_USE
 void set_status_button_sensitive();
@@ -23,7 +42,6 @@ void set_status_button_insensitive();
 #define set_status_button_sensitive()
 #define set_status_button_insensitive()
 #endif
-
 
 /* Internal implementation */
 #define DIALUP_STR "dialup"
@@ -65,26 +83,19 @@ inline static void telekeypad_set_conn_state(int state)
 	}
 }
 
-static inline void send_telenumber(const gchar *telenumber)
-{
-	g_printf("dialup with telephone number: %s\n", telenumber);
-	/* call your dialup function here */
-}
-
 static inline void dialup_accept(const gchar *telenumber)
 {
 	if (tele_state != DISCONNECT)	/* only do connect while disconnect */
 		return;
 	if (iscallin) {	/* accept */
-		g_printf("accept telephone number: %s\n", telenumber);
-		/* call your accept function here */
+		_do_accept(telenumber);
 
 		telekeypad_set_conn_state(CONNECTED);
 		iscallin = 0;
 	} else {	/* dialup */
 		telekeypad_set_conn_state(CONNECTING);
 
-		send_telenumber(telenumber);
+		_do_dialup(telenumber);
 
 		telekeypad_set_conn_state(CONNECTED);
 	}
@@ -92,24 +103,22 @@ static inline void dialup_accept(const gchar *telenumber)
 
 static inline void hangup()
 {
-	if (tele_state != DISCONNECT) {
-		g_printf("hangup\n");
-		/* call your hangup function here */
-	}
+	if (tele_state != DISCONNECT)
+		_do_hangup();
 	telekeypad_set_conn_state(DISCONNECT);
 	gtk_editable_delete_text(GTK_EDITABLE(entry), 0, -1);
 	iscallin = 0;
 }
 
 /* Event callback handler
- * ================ */
+ * { */
 static void entry_insert(GtkEditable *editable,
 		gchar *new_text, gint new_text_length,
 		gint *position, gpointer user_data)
 {
 	/* dialup string you input or paste if connected */
 	if (tele_state == CONNECTED)
-		send_telenumber(new_text);
+		_do_dialup(new_text);
 }
 
 static void entry_activate(GtkEntry *entry, GtkButton *button)
@@ -165,7 +174,7 @@ static gboolean dialog_close(GtkDialog *dialog, GdkEvent *event, gpointer data)
 	set_status_button_sensitive();
 	return TRUE;
 }
-/* ================ */
+/* } */
 
 inline static GtkWidget *prepare_icon(int buttonid)
 {
