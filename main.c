@@ -17,7 +17,7 @@ static void close_window(GtkButton *button, G_GNUC_UNUSED gpointer user_data)
 	gtk_widget_destroy(GTK_WIDGET(window));
 }
 
-#ifdef FOR_MY_OWN_USE
+#ifndef FOR_MY_OWN_USE
 static GtkWidget *status_button = NULL;
 void set_status_button_sensitive()
 {
