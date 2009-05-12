@@ -155,7 +155,7 @@ skip_insert:
 	}
 }
 
-gboolean dialog_close(GtkDialog *dialog, GdkEvent *event, gpointer data)
+static gboolean dialog_close(GtkDialog *dialog, GdkEvent *event, gpointer data)
 {
 	/* Here dialog is closed. Don't change order of cleanup routines. */
 	hangup();
@@ -167,7 +167,7 @@ gboolean dialog_close(GtkDialog *dialog, GdkEvent *event, gpointer data)
 }
 /* ================ */
 
-static GtkWidget *prepare_icon(int buttonid)
+inline static GtkWidget *prepare_icon(int buttonid)
 {
 	int len = strlen(icon_path);
 	GError *error = NULL;
@@ -300,7 +300,7 @@ static GtkWidget *prepare_telekeypad(GtkWindow *parent_window)
 	return dialog;
 }
 
-static void open_telekeypad(GtkWindow *window, gpointer data)
+inline static void open_telekeypad(GtkWindow *window, gpointer data)
 {
 	GtkWidget *dialog = prepare_telekeypad(window);
 	assert(dialog != NULL);
@@ -312,6 +312,7 @@ static void open_telekeypad(GtkWindow *window, gpointer data)
 #endif
 	/* The cleanup routines is all placed in dialog_close callback. */
 }
+
 
 /* External Interface */
 void telekeypad_callout(GtkWindow *w, gpointer data)
